@@ -1,4 +1,3 @@
-// Thought: isAdmin bool(can only incorporate 2 roles) it will be better if string or enum so in future more roles can be added easily
 package main
 
 import (
@@ -6,10 +5,6 @@ import (
 	"reflect"
 )
 
-var Contact_Detailsmap = make(map[int]*Contact_Details)
-var Contact_Detailsmapid = -1
-var Contactmap = make(map[int]*Contact)
-var Contactmapid = -1
 var Usermap = make(map[int]*User)
 var Usermapid = -1
 
@@ -37,18 +32,15 @@ type User struct {
 	Contacts []*Contact
 }
 
-func NewContact_Details(Type, NumberorEmail string) (*Contact_Details, error) {
-	//i think check for contact details id is not required as will never be passed by user!
-	// isActive bhi hamesha true hona chahiye creating ke vakat toh params mai lene ki jarurat nhi
+func NewContact_Details(Id int, Type, NumberorEmail string) (*Contact_Details, error) {
 	if Type == "" || (Type != "Number" && Type != "Email") {
 		return nil, fmt.Errorf("Invalid Type!")
 	}
-	Contact_Detailsmapid++
+
 	cd := &Contact_Details{
-		Contact_Details_ID: Contact_Detailsmapid,
+		Contact_Details_ID: Id,
 		Type:               Type,
 	}
-	Contact_Detailsmap[Contact_Detailsmapid] = cd
 
 	if Type == "Email" {
 		cd.Email = NumberorEmail
@@ -60,7 +52,7 @@ func NewContact_Details(Type, NumberorEmail string) (*Contact_Details, error) {
 
 }
 
-func NewContact(F_name string, L_name string) (*Contact, error) {
+func NewContact(Id int, F_name string, L_name string) (*Contact, error) {
 	if F_name == "" {
 		return nil, fmt.Errorf("First Name Cannot be Empty!")
 	}
@@ -68,15 +60,13 @@ func NewContact(F_name string, L_name string) (*Contact, error) {
 		return nil, fmt.Errorf("Last Name Cannot be Empty!")
 	}
 
-	Contactmapid++
 	c := &Contact{
-		Contact_ID:      Contactmapid,
+		Contact_ID:      Id,
 		F_name:          F_name,
 		L_name:          L_name,
 		isActive:        true,
 		Contact_Details: []*Contact_Details{},
 	}
-	Contactmap[Contactmapid] = c
 	return c, nil
 
 }
@@ -101,11 +91,22 @@ func NewUser(F_name, L_name string, isAdmin bool) (*User, error) {
 	return u, nil
 }
 
-func (U *User) CreateNewUser(F_name, L_name string, isAdmin bool) (*User, error) {
+func (U *User) CreateNewStaff(F_name, L_name string) (*User, error) {
 	if !U.isAdmin {
 		return nil, fmt.Errorf("You Don't have admin previlages to create a User!")
 	}
-	anewUser, err := NewUser(F_name, L_name, isAdmin)
+	anewUser, err := NewUser(F_name, L_name, false)
+	if err != nil {
+		return nil, err
+	}
+	return anewUser, nil
+}
+
+func (U *User) CreateNewAdmin(F_name, L_name string) (*User, error) {
+	if !U.isAdmin {
+		return nil, fmt.Errorf("You Don't have admin previlages to create a User!")
+	}
+	anewUser, err := NewUser(F_name, L_name, true)
 	if err != nil {
 		return nil, err
 	}
@@ -138,47 +139,92 @@ func (U *User) DeleteUserById(id int) error {
 	if !U.isAdmin {
 		return fmt.Errorf("You Don't have admin previlages to Delete User!")
 	}
+	if !U.isActive {
+		return fmt.Errorf("Inactive Users Cannot Delete Users!")
+	}
 	UserWithMatchingId, err := U.GetUserById(id)
 	if err != nil {
 		return err
 	}
-	// delete(Usermap, id)
 	UserWithMatchingId.isActive = false
 	return nil
 }
 
-func (C *Contact) GetContactById(id int) (*Contact, error) {
-	ContactbyId, ok := Contactmap[id]
-	if !ok {
-		return nil, fmt.Errorf("Contact with id: %d not found!", id)
+func (U *User) GetContactById(id int) (*Contact, error) {
+	if !U.isAdmin {
+		return nil, fmt.Errorf("Admin not allowed to get Contacts from Id!")
 	}
-	return ContactbyId, nil
+	if !U.isActive {
+		return nil, fmt.Errorf("Inactive Users are not allowed to get Contacts from Id!")
+	}
+	if !U.ValidateContactId(id) {
+		return nil, fmt.Errorf("Please give a valid ID")
+	}
+	for _, contactsval := range U.Contacts {
+		if contactsval.CheckIfContactActivebyId() == id {
+			return contactsval, nil
+		}
+	}
+	return nil, fmt.Errorf("Didn't Found Contact with given id:%d", id)
 }
 
-func (C *Contact) GetContact_DetailsById(id int) (*Contact_Details, error) {
-	Contact_DetailsbyId, ok := Contact_Detailsmap[id]
-	if !ok {
-		return nil, fmt.Errorf("Contact_Details with id: %d not found!", id)
+func (U *User) ValidateContactId(id int) bool {
+	if id < 0 || id > len(U.Contacts) {
+		return false
 	}
-	return Contact_DetailsbyId, nil
+	return true
 }
 
-// func (C *Contact) GetContactByIndex(id int, contactSlice []*Contact) (*Contact, error) {
-// 	for _, val := range contactSlice {
-// 		if val.Contact_ID == id {
-// 			return val, nil
-// 		}
-// 	}
-// 	return nil, fmt.Errorf("Contact with id: %d not found in User Contact slice!", id)
-// }
+func (C *Contact) ValidateContact_DetailsId(id int) bool {
+	if id < 0 || id > len(C.Contact_Details) {
+		return false
+	}
+	return true
+}
 
-func (C *Contact) DeleteContactById(id int) error {
-	ContactWithMatchingId, err := C.GetContactById(id)
+func (C *Contact) CheckIfContactActivebyId() int {
+	if C.isActive {
+		return C.Contact_ID
+	}
+	return -1
+}
+
+func (U *User) GetContact_DetailsById(ContactId, Contact_DetailsId int) (*Contact_Details, error) {
+	if !U.isAdmin {
+		return nil, fmt.Errorf("Admin not allowed to get Contacts from Id!")
+	}
+	if !U.isActive {
+		return nil, fmt.Errorf("Inactive Users are not allowed to get Contacts from Id!")
+	}
+
+	TargetContact, err := U.GetContactById(ContactId)
+	if err != nil {
+		return nil, err
+	}
+
+	if !TargetContact.ValidateContact_DetailsId(Contact_DetailsId) {
+		return nil, fmt.Errorf("Please give a valid ID")
+	}
+
+	for _, ConDetails := range TargetContact.Contact_Details {
+		if ConDetails.Contact_Details_ID == Contact_DetailsId {
+			return ConDetails, nil
+		}
+	}
+	return nil, fmt.Errorf("Didn't Found Contact with given id:%d", Contact_DetailsId)
+}
+
+func (U *User) DeleteContactById(id int) error {
+	if U.isAdmin {
+		return fmt.Errorf("Admins are not allowed to delete Contacts!")
+	}
+	if !U.isActive {
+		return fmt.Errorf("Inactive Users are not allowed to delete Contacts")
+	}
+	ContactWithMatchingId, err := U.GetContactById(id)
 	if err != nil {
 		return err
 	}
-	// _, err = C.DeleteContactByIndex()
-	// delete(Contactmap, id)
 	ContactWithMatchingId.isActive = false
 	return nil
 }
@@ -192,16 +238,22 @@ func (C *Contact_Details) GetContact_DetailsByIndex(id int, contactSlice []*Cont
 	return nil, fmt.Errorf("Contact_Details with id: %d not found in User Contact slice!", id)
 }
 
-func (C *Contact) DeleteContact_DetailsById(id int, SliceOnWhichPerformDelete []*Contact_Details) error {
-	_, err := C.GetContact_DetailsById(id)
+func (U *User) DeleteContact_DetailsById(Contactid, Contact_Details_ID int) error {
+	Contact_DetailsObjectToDelete, err := U.GetContact_DetailsById(Contactid, Contact_Details_ID)
 	if err != nil {
 		return err
 	}
-	delete(Contact_Detailsmap, id)
-	err = C.DeleteContact_DetailsByIndex(id, SliceOnWhichPerformDelete)
+	ContactSliceToPerformDelete, err := U.GetContactById(Contactid)
 	if err != nil {
 		return err
 	}
+	NewContact_DetailsSliceToset := []*Contact_Details{}
+	for _, Contact_Detailsval := range ContactSliceToPerformDelete.Contact_Details {
+		if Contact_Detailsval != Contact_DetailsObjectToDelete {
+			NewContact_DetailsSliceToset = append(NewContact_DetailsSliceToset, Contact_Detailsval)
+		}
+	}
+	ContactSliceToPerformDelete.Contact_Details = NewContact_DetailsSliceToset
 	return nil
 }
 
@@ -225,7 +277,17 @@ func getVariableType(v interface{}) string {
 	return reflect.TypeOf(v).String()
 }
 
-func (U *User) UpdateUser(UserToBeUpdated *User, param string, value interface{}) error {
+func (U *User) UpdateUser(UserId int, param string, value interface{}) error {
+	if !U.isAdmin {
+		return fmt.Errorf("You Don't have admin previlages to update users!")
+	}
+	if !U.isActive {
+		return fmt.Errorf("Inactive Users Cannot Update users!")
+	}
+	UserToBeUpdated, err := U.GetUserById(UserId)
+	if err != nil {
+		return err
+	}
 
 	switch param {
 	case "F_name":
@@ -246,14 +308,8 @@ func (U *User) UpdateUser(UserToBeUpdated *User, param string, value interface{}
 			return err
 		}
 		return nil
-	case "isActive":
-		err := UserToBeUpdated.UpdateisActive(value)
-		if err != nil {
-			return err
-		}
-		return nil
-	// case "Contact":
-	// 	err := UserToBeUpdated.UpdateContactId(contactId, value)
+	// case "isActive":
+	// 	err := UserToBeUpdated.UpdateisActive(value)
 	// 	if err != nil {
 	// 		return err
 	// 	}
@@ -263,8 +319,14 @@ func (U *User) UpdateUser(UserToBeUpdated *User, param string, value interface{}
 	}
 }
 
-func (C *Contact) UpdateContactById(id int, param string, value interface{}) error {
-	ContacWithMatchingId, err := C.GetContactById(id)
+func (U *User) UpdateContactById(id int, param string, value interface{}) error {
+	if U.isAdmin {
+		return fmt.Errorf("Admin's are not allowed to update contact!")
+	}
+	if !U.isActive {
+		return fmt.Errorf("Inactive Users are not allowed to update contact!")
+	}
+	ContacWithMatchingId, err := U.GetContactById(id)
 	if err != nil {
 		return err
 	}
@@ -289,12 +351,12 @@ func (C *Contact) UpdateContact(param string, value interface{}) error {
 			return err
 		}
 		return nil
-	case "isActive":
-		err := C.UpdateisActive(value)
-		if err != nil {
-			return err
-		}
-		return nil
+	// case "isActive":
+	// 	err := C.UpdateisActive(value)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	return nil
 	default:
 		return fmt.Errorf("No matching params founnd to Update!")
 
@@ -352,57 +414,31 @@ func (U *User) UpdateisAdmin(value interface{}) error {
 	return nil
 }
 
-func (U *User) UpdateisActive(value interface{}) error {
-	if !U.isAdmin {
-		return fmt.Errorf("You Don't have admin previlages to Update User Active Status!")
-	}
-	if getVariableType(value) != "bool" {
-		return fmt.Errorf("Please Enter a boolean value!")
-	}
-	conval, ok := value.(bool)
-	if !ok {
-		return fmt.Errorf("Error in setting isActive boolean!")
-	}
-	U.isActive = conval
-	return nil
-}
-
-// func (U *User) UpdateContactId(id int, value interface{}) error {
-// 	if getVariableType(value) != "int" {
-// 		return fmt.Errorf("Please Enter a int value for Id!")
-// 		conval, ok := value.(bool)
-// 		if !ok {
-// 			return fmt.Errorf("Error in setting isActive boolean!")
-// 		}
-// 		U.isActive = conval
-// 		return nil
+// func (U *User) UpdateisActive(value interface{}) error {
+// 	if !U.isAdmin {
+// 		return fmt.Errorf("You Don't have admin previlages to Update User Active Status!")
 // 	}
+// 	if getVariableType(value) != "bool" {
+// 		return fmt.Errorf("Please Enter a boolean value!")
+// 	}
+// 	conval, ok := value.(bool)
+// 	if !ok {
+// 		return fmt.Errorf("Error in setting isActive boolean!")
+// 	}
+// 	U.isActive = conval
+// 	return nil
 // }
 
-func (U *User) GetAllSystemContacts() ([]*Contact, error) {
-	// if !U.isAdmin {
-	// 	return nil, fmt.Errorf("You Don't have admin previlages to Read all Contacts!")
-	// }
-	AllContactsSlice := []*Contact{}
-	for _, val := range Contactmap {
-		AllContactsSlice = append(AllContactsSlice, val)
-	}
-	return AllContactsSlice, nil
-}
-
-func (U *User) GetAllSystemContact_Details() ([]*Contact_Details, error) {
-	// if !U.isAdmin {
-	// 	return nil, fmt.Errorf("You Don't have admin previlages to Read all Contact_Details!")
-	// }
-	AllContact_DetailssSlice := []*Contact_Details{}
-	for _, val := range Contact_Detailsmap {
-		AllContact_DetailssSlice = append(AllContact_DetailssSlice, val)
-	}
-	return AllContact_DetailssSlice, nil
-}
-
 func (U *User) AddNewContact(F_name, L_name string) (*Contact, error) {
-	anewContact, err := NewContact(F_name, L_name)
+	//active or not admin
+	if !U.isActive {
+		return nil, fmt.Errorf("Inactive User Cannot Add New Contact!")
+	}
+	if U.isAdmin {
+		return nil, fmt.Errorf("Admin Cannot Add New Contacts!")
+	}
+	newId := len(U.Contacts)
+	anewContact, err := NewContact(newId, F_name, L_name)
 	if err != nil {
 		return nil, err
 	}
@@ -441,29 +477,46 @@ func (C *Contact) UpdateLname(value interface{}) error {
 	return nil
 }
 
-func (C *Contact) UpdateisActive(value interface{}) error {
-	if getVariableType(value) != "bool" {
-		return fmt.Errorf("Please Enter a boolean value!")
-	}
-	conval, ok := value.(bool)
-	if !ok {
-		return fmt.Errorf("Error in setting isActive boolean!")
-	}
-	C.isActive = conval
-	return nil
-}
+// func (C *Contact) UpdateisActive(value interface{}) error {
+// 	if getVariableType(value) != "bool" {
+// 		return fmt.Errorf("Please Enter a boolean value!")
+// 	}
+// 	conval, ok := value.(bool)
+// 	if !ok {
+// 		return fmt.Errorf("Error in setting isActive boolean!")
+// 	}
+// 	C.isActive = conval
+// 	return nil
+// }
 
-func (C *Contact) AddNewContact_Details(Type, NumberorEmail string) (*Contact_Details, error) {
-	anewContact_Details, err := NewContact_Details(Type, NumberorEmail)
+func (U *User) AddNewContact_DetailsByContacId(ContactId int, Type, NumberorEmail string) (*Contact_Details, error) {
+	if U.isAdmin {
+		return nil, fmt.Errorf("Admin is not allowed to create contact_details!")
+	}
+	if !U.isActive {
+		return nil, fmt.Errorf("Inactive Users are not allowed to create contact_details!")
+	}
+	ContactToAddContactDetails, err := U.GetContactById(ContactId)
 	if err != nil {
 		return nil, err
 	}
-	C.Contact_Details = append(C.Contact_Details, anewContact_Details)
+	NewId := len(ContactToAddContactDetails.Contact_Details)
+	anewContact_Details, err := NewContact_Details(NewId, Type, NumberorEmail)
+	if err != nil {
+		return nil, err
+	}
+	ContactToAddContactDetails.Contact_Details = append(ContactToAddContactDetails.Contact_Details, anewContact_Details)
 	return anewContact_Details, nil
 }
 
-func (C *Contact) UpdateContact_DetailsById(id int, param string, value interface{}) error {
-	ContacWithMatchingId, err := C.GetContact_DetailsById(id)
+func (U *User) UpdateContact_DetailsById(ContactId, ContactDetailid int, param string, value interface{}) error {
+	if U.isAdmin {
+		return fmt.Errorf("Admin is not allowed to create contact_details!")
+	}
+	if !U.isActive {
+		return fmt.Errorf("Inactive Users are not allowed to create contact_details!")
+	}
+	ContacWithMatchingId, err := U.GetContact_DetailsById(ContactId, ContactDetailid)
 	if err != nil {
 		return err
 	}
@@ -525,7 +578,7 @@ func main() {
 		fmt.Println(err)
 	}
 	fmt.Println(*user1)
-	user2, err := user1.CreateNewUser("Yash", "Shah", false)
+	user2, err := user1.CreateNewStaff("Yash", "Shah")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -542,21 +595,21 @@ func main() {
 	}
 	fmt.Println(*user1contact2)
 	fmt.Println(*user1)
-	err = user1.Contacts[1].DeleteContactById(1)
+	err = user1.DeleteContactById(1)
 	if err != nil {
 		fmt.Println(err)
 	}
 	fmt.Println(*user1.Contacts[1])
-	err = user1.Contacts[0].UpdateContactById(1, "F_name", "Something")
+	err = user1.UpdateContactById(1, "F_name", "Something")
 	if err != nil {
 		fmt.Println(err)
 	}
-	user1.Contacts[1].AddNewContact_Details("Email", "vishavpathania40@gmail.com")
-	fmt.Println("Checking", *user1.Contacts[1].Contact_Details[0])
-	err = user1.Contacts[1].DeleteContact_DetailsById(0, user1.Contacts[1].Contact_Details)
-	if err != nil {
-		fmt.Println(err)
-	}
+	// user1.Contacts[1].AddNewContact_Details("Email", "vishavpathania40@gmail.com")
+	// fmt.Println("Checking", *user1.Contacts[1].Contact_Details[0])
+	// err = user1.Contacts[1].DeleteContact_DetailsById(0, user1.Contacts[1].Contact_Details)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
 	for _, val := range user1.Contacts[1].Contact_Details {
 		fmt.Println(*val)
 		fmt.Println("Checking again----->")
