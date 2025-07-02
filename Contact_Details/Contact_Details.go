@@ -37,18 +37,18 @@ func (C *Contact_Details) UpdateContact_Details(Type, value interface{}) error {
 		return fmt.Errorf("type can either be a number or email")
 	}
 	if Type == "Number" {
-		C.Email = ""
 		err := C.UpdateContact_DetailsNumber(value)
 		if err != nil {
 			return err
 		}
+		C.Email = ""
 		return nil
 	} else {
-		C.Number = ""
 		err := C.UpdateConatct_DetailsEmail(value)
 		if err != nil {
 			return err
 		}
+		C.Number = ""
 		return nil
 	}
 }
