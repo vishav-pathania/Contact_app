@@ -80,12 +80,8 @@ func (U *User) GetAllUserContacts(Userid int) ([]contact.Contact, error) {
 	if !U.isActive {
 		return nil, fmt.Errorf("inactive users cannot read contacts")
 	}
-	UserWhoseContactsNeeded, err := U.GetUserById(Userid)
-	if err != nil {
-		return nil, err
-	}
 	copyOfUserContacts := []contact.Contact{}
-	for _, userContact := range UserWhoseContactsNeeded.Contacts {
+	for _, userContact := range U.Contacts {
 		copyOfUserContacts = append(copyOfUserContacts, *userContact)
 	}
 	return copyOfUserContacts, nil
@@ -93,7 +89,10 @@ func (U *User) GetAllUserContacts(Userid int) ([]contact.Contact, error) {
 
 func (U *User) GetUserById(id int) (*User, error) {
 	if !U.isAdmin {
-		return nil, fmt.Errorf("you Don't have admin previlages to Read User")
+		return nil, fmt.Errorf("you don't have admin previlages to Read User")
+	}
+	if !U.isActive {
+		return nil, fmt.Errorf("inactive admin cannot read users")
 	}
 	UserbyId, ok := userMap[id]
 	if !ok {
