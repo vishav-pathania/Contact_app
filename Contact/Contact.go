@@ -148,7 +148,8 @@ func (C *Contact) AddNewContact_Details(Type, NumberorEmail string) (*contact_de
 	if !C.isActive {
 		return nil, fmt.Errorf("inactive contacts cannot add new contact details")
 	}
-	newId := len(C.Contact_Details) + 1
+	// newId := len(C.Contact_Details) + 1
+	newId := C.Contact_Details[len(C.Contact_Details)-1].Contact_Details_ID + 1
 	newContactDetails, err := contact_detail.NewContact_Details(newId, Type, NumberorEmail)
 	if err != nil {
 		return nil, err
